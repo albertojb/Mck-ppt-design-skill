@@ -22,27 +22,11 @@
 
 ## Community
 
-<table width="100%">
-    <tr>
-      <td align="center" width="50%" valign="top">
-        <p><strong>WeChat Group / 微信交流群</strong></p>
-          <img width="160" alt="Clipboard_Screenshot_1776746070" src="https://github.com/user-attachments/assets/71373a9b-7611-46e0-801f-6105446dde54" />
-        <br/>
-        <sub style="color: gray;">扫描二维码加入社群</sub>
-      </td>
-      <td align="center" width="50%" valign="top">
-        <p><strong>Discord Server</strong></p>
-        <br/>
-        <a href="https://discord.gg/SaFybFAT">
-          <img src="https://img.shields.io/badge/Discord-Join_Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" />
-        </a>
-        <br/><br/>
-        <p>Click above to join our global community</p>
-      </td>
-    </tr>
-  </table>
+Original Skill (https://github.com/likaku/Mck-ppt-design-skill) has a wechat/discord community. Visit and Star them if you are interested. 
 
 ---
+
+I, albertojb did this fork for personal use, this will likely be maintained with AI Agents code, please install likaku's original Skill if you are want the most current version. https://github.com/likaku/Mck-ppt-design-skill 
 
 ## ⚡ v1.x → v2.0 — The Real Shift: GPU → CPU
 
