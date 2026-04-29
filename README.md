@@ -148,6 +148,7 @@ What stays on GPU:
 | 13 | **Chart legend overflow check** [v2.3.2] | Legend/label elements extending beyond content area right boundary |
 
 ---
+## likaku's v.2.3 was forked - I will version this as 0.1 - This is purely agentic/vibecoded from now on my side - I converted what I could to english and reviewed with Agents to de-duplicate some instructions. That's it. The core is still @likaku's work and I don't presume any copyright, claim any significant effort, or pretend any attribution. Please star the original project. 
 
 ## 🔍 v2.3 — Post-Generation Review + Auto-fix Pipeline
 
@@ -373,6 +374,7 @@ eng.save('output/deck.pptx')
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| **v2.3.3 -> v0.1 | 2026-04-29 | likaku's v.2.3 was forked - I will version this as 0.1 - This is purely agentic/vibecoded from now on my side - I converted what I could to english and reviewed with Agents to de-duplicate some instructions. That's it. The core is still @likaku's work and I don't presume any copyright, claim any significant effort, or pretend any attribution. Please star the original project. |
 | **v2.3.3** | 2026-04-09 | Layout formatting polish, chart bottom-alignment, unified color palette (NAVY + BG_GRAY), retired 5 legacy layouts (Venn, Cycle, Funnel, Pie, Gauge) |
 | **v2.3.2** | 2026-03-25 | **DeckBuilder**: storyline-driven deck generator (`deck_builder.py`) — accepts storyline list, auto-dispatches to MckEngine methods, built-in QA validation; **stacked_bar fix**: adaptive legend spacing prevents right-side overflow, chart area repositioned for visual balance; **new QA rule** `chart_legend_overflow` (detects legend/label exceeding content area, excludes page numbers); **storylines/ai_enterprise.py**: 33-slide Chinese AI enterprise applications demo using 20+ layout types |
 | **v2.3.1** | 2026-03-24 | Dynamic row height for `numbered_list_panel` (fills panel height evenly, eliminates blank space); new QA rule `text_line_collision` (detects text overlapping separator lines with horizontal overlap validation) |
