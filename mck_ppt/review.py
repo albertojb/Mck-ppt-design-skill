@@ -9,8 +9,8 @@ Post-generation Review + Auto-fix Pipeline for mck_ppt.
 Four-stage flow:
   1. Page Brief — structure content into page_objective / one_message / mece_buckets
   2. Dual QA — Narrative QA (content) + Layout QA (geometry, via qa.py)
-  3. Auto-fix — priority chain: 去冗余 → 统一语言 → 压缩句式 → 重构层级 → 字号微调
-     (NO layout/布局 changes — user constraint)
+  3. Auto-fix — priority chain: trim redundancy → unify language → compress → restructure → font nudge
+     (NO layout changes — user constraint)
   4. Gate — 0 ERROR = pass; otherwise iterate (max N rounds)
 
 Usage:
@@ -89,7 +89,7 @@ SMALL_MIN_PT = 9    # small/footnote floor
 class NarrativeIssue:
     slide_num: int
     severity: str       # ERROR / WARNING / INFO
-    category: str       # e.g. "no_action_title", "lang_mix", "density"
+    category: str       # e.g. "no_action_title", "density"
     message: str
     shape_name: str = ""
     suggestion: str = ""
@@ -144,15 +144,11 @@ class NarrativeReviewer:
     def _check_slide(self, num: int, slide) -> List[NarrativeIssue]:
         issues = []
         shapes = list(slide.shapes)
-        all_text = self._collect_text(shapes)
 
-        # 1. Check for mixed Chinese/English where unnecessary
-        issues.extend(self._check_lang_mix(num, shapes))
-
-        # 2. Check text density per box
+        # 1. Check text density per box
         issues.extend(self._check_density(num, shapes))
 
-        # 3. Check title length
+        # 2. Check title length
         issues.extend(self._check_title_length(num, shapes))
 
         return issues
@@ -163,38 +159,6 @@ class NarrativeReviewer:
             if s.has_text_frame:
                 parts.append(s.text_frame.text)
         return "\n".join(parts)
-
-    # ── Mixed language check ──────────────────────────────────
-    _EN_JARGON_RE = re.compile(
-        r'\b(selling motion|business acumen|true leader|value proposition|'
-        r'key takeaway|stakeholder|playbook|deal review|pipeline|'
-        r'account lead|solution architect|domain expert|customer success|'
-        r'partner ecosystem|extended capability|value realization|'
-        r'industry coe|orchestrator|value architect)\b',
-        re.IGNORECASE,
-    )
-
-    def _check_lang_mix(self, num: int, shapes) -> List[NarrativeIssue]:
-        issues = []
-        for s in shapes:
-            if not s.has_text_frame:
-                continue
-            text = s.text_frame.text
-            # Only flag if the text is predominantly Chinese (>30% CJK)
-            cjk = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
-            if len(text) == 0 or cjk / max(len(text), 1) < 0.2:
-                continue
-            matches = self._EN_JARGON_RE.findall(text)
-            if matches:
-                issues.append(NarrativeIssue(
-                    slide_num=num,
-                    severity=Severity.INFO,
-                    category="lang_mix",
-                    message=f"中英混用术语: {', '.join(set(m.lower() for m in matches))}",
-                    shape_name=getattr(s, "name", ""),
-                    suggestion="仅供参考，英文专有名词可保留原文",
-                ))
-        return issues
 
     # ── Text density per box ──────────────────────────────────
     def _check_density(self, num: int, shapes) -> List[NarrativeIssue]:
@@ -218,9 +182,9 @@ class NarrativeReviewer:
                     slide_num=num,
                     severity=Severity.WARNING,
                     category="density",
-                    message=f"文本密度过高: {char_count}字 / {box_h_in:.2f}\" 高度框 (建议≤{limit})",
+                    message=f"Text too dense: {char_count} chars in {box_h_in:.2f}\" box (recommended ≤{limit})",
                     shape_name=getattr(s, "name", ""),
-                    suggestion="考虑精简文案或拆分内容",
+                    suggestion="Consider shortening copy or splitting content across slides",
                 ))
         return issues
 
@@ -239,9 +203,9 @@ class NarrativeReviewer:
                                 slide_num=num,
                                 severity=Severity.WARNING,
                                 category="title_long",
-                                message=f"标题过长: {len(text)}字 (建议≤{ACTION_TITLE_MAX_CHARS})",
+                                message=f"Title too long: {len(text)} chars (recommended ≤{ACTION_TITLE_MAX_CHARS})",
                                 shape_name=getattr(s, "name", ""),
-                                suggestion="缩短标题，把补充信息移到副标题或正文",
+                                suggestion="Shorten title; move supplementary info to subtitle or body",
                             ))
                         break  # one check per shape
                 break
@@ -300,40 +264,28 @@ class SlideReviewer:
 # AutoFixPipeline — fix text overflow by priority chain
 #
 # Priority (no layout changes, per user constraint):
-#   1. 去冗余 — remove redundant phrasing, weak info
-#   2. 统一语言 — replace unnecessary English jargon with Chinese
-#   3. 压缩句式 — shorten sentences
-#   4. 重构层级 — restructure bullets (within same box)
-#   5. 字号微调 — shrink font within guard rails
+#   1. trim redundancy — remove redundant phrasing, weak info
+#   2. unify language — replace unnecessary jargon (mapping is empty by default)
+#   3. compress — shorten sentences
+#   4. restructure — restructure bullets (within same box)
+#   5. font nudge — shrink font within guard rails
 #
 # Works directly on the .pptx shapes (post-generation fix).
 # ═══════════════════════════════════════════════════════════════
 
-# Mapping of English jargon → Chinese replacement
-# DISABLED: English domain terms (selling motion, business acumen, playbook,
-# deal review, etc.) are intentional professional vocabulary — do NOT translate.
+# Jargon replacement map — empty by default; add entries if needed for your deck
 _LANG_REPLACEMENTS = {}
 
-# Redundancy patterns: (regex, replacement_or_empty)
+# Redundancy patterns: (regex, replacement)
 _REDUNDANCY_PATTERNS = [
-    # Remove weak hedging
-    (re.compile(r'(?:从某种意义上说|在一定程度上|可以说是)'), ''),
-    # Remove trailing "等" after a clear list
-    (re.compile(r'([^、]+、[^、]+)等(?=[。，])'), r'\1'),
-    # Collapse "进行XX" → "XX"
-    (re.compile(r'进行([\u4e00-\u9fff]{2,4})'), r'\1'),
-    # Remove "的话"
-    (re.compile(r'的话(?=[，。；])'), ''),
+    (re.compile(r'\bin a sense\b', re.IGNORECASE), ''),
+    (re.compile(r'\bto some extent\b', re.IGNORECASE), ''),
+    (re.compile(r'\bit can be said that\b', re.IGNORECASE), ''),
 ]
 
-# Sentence compression: simplify common verbose patterns
+# Sentence compression patterns
 _COMPRESSION_PATTERNS = [
-    # "因为A所以B" → "A → B"  (for bullet-style text)
-    (re.compile(r'因为(.{4,20})(?:，|,)所以(.{4,20})'), r'\1 → \2'),
-    # "不仅...而且..." → combine
-    (re.compile(r'不仅(.{3,15})(?:，|,)而且(.{3,15})'), r'\1，且\2'),
-    # "通过...来实现..." simplify
-    (re.compile(r'通过(.{3,15})来实现(.{3,15})'), r'\1实现\2'),
+    (re.compile(r' {2,}'), ' '),  # collapse multiple spaces
 ]
 
 
@@ -419,15 +371,15 @@ class AutoFixPipeline:
             if fixed and self._check_fits(tf, box_w, box_h):
                 fixes_count += 1
                 if verbose:
-                    print(f"    S{err.slide_num} [{err.shape_name}] ✂️  去冗余 → 通过")
+                    print(f"    S{err.slide_num} [{err.shape_name}] ✂️  trim redundancy → resolved")
                 continue
 
-            # Priority 2: Unify language (replace English jargon)
+            # Priority 2: Unify language (replace jargon)
             fixed = self._fix_language(tf)
             if fixed and self._check_fits(tf, box_w, box_h):
                 fixes_count += 1
                 if verbose:
-                    print(f"    S{err.slide_num} [{err.shape_name}] 🔤 统一语言 → 通过")
+                    print(f"    S{err.slide_num} [{err.shape_name}] 🔤 unify language → resolved")
                 continue
 
             # Priority 3: Compress sentences
@@ -435,7 +387,7 @@ class AutoFixPipeline:
             if fixed and self._check_fits(tf, box_w, box_h):
                 fixes_count += 1
                 if verbose:
-                    print(f"    S{err.slide_num} [{err.shape_name}] 📐 压缩句式 → 通过")
+                    print(f"    S{err.slide_num} [{err.shape_name}] 📐 compress → resolved")
                 continue
 
             # Priority 4: Restructure (trim bullets, shorten)
@@ -443,7 +395,7 @@ class AutoFixPipeline:
             if fixed and self._check_fits(tf, box_w, box_h):
                 fixes_count += 1
                 if verbose:
-                    print(f"    S{err.slide_num} [{err.shape_name}] 🔄 重构层级 → 通过")
+                    print(f"    S{err.slide_num} [{err.shape_name}] 🔄 restructure → resolved")
                 continue
 
             # Priority 5: Font size micro-adjust
@@ -451,11 +403,11 @@ class AutoFixPipeline:
             if fixed:
                 fixes_count += 1
                 if verbose:
-                    print(f"    S{err.slide_num} [{err.shape_name}] 🔠 字号微调 → 通过")
+                    print(f"    S{err.slide_num} [{err.shape_name}] 🔠 font nudge → resolved")
                 continue
 
             if verbose:
-                print(f"    S{err.slide_num} [{err.shape_name}] ⚠️  所有策略未能解决溢出")
+                print(f"    S{err.slide_num} [{err.shape_name}] ⚠️  all strategies exhausted — overflow remains")
 
         if fixes_count > 0:
             prs.save(self.filepath)
@@ -543,7 +495,7 @@ class AutoFixPipeline:
                     names = [getattr(e[1], 'name', '?') for e in g]
                     texts = [e[1].text_frame.text.strip()[:20] for e in g]
                     print(f"    S{slide_idx+1} y≈{g[0][0]/914400:.2f}\" "
-                          f"统一为 {target_size}pt "
+                          f"unified to {target_size}pt "
                           f"({', '.join(f'{t}' for t in texts)})")
 
         if total_adjusted > 0:
@@ -554,10 +506,10 @@ class AutoFixPipeline:
             except Exception:
                 pass
             if verbose:
-                print(f"  已调整 {total_adjusted} 个 shape 的字号以保持同级一致")
+                print(f"  Adjusted {total_adjusted} shape(s) to harmonize peer font sizes")
         else:
             if verbose:
-                print("  ✅ 所有同级 peer group 字号已一致")
+                print("  ✅ All peer groups already have consistent font sizes")
 
         return total_adjusted
 
@@ -594,8 +546,8 @@ class AutoFixPipeline:
             for run in para.runs:
                 text = run.text
                 original = text
-                for en, zh in _LANG_REPLACEMENTS.items():
-                    text = re.sub(re.escape(en), zh, text, flags=re.IGNORECASE)
+                for en, replacement in _LANG_REPLACEMENTS.items():
+                    text = re.sub(re.escape(en), replacement, text, flags=re.IGNORECASE)
                 if text != original:
                     run.text = text
                     changed = True
@@ -610,9 +562,9 @@ class AutoFixPipeline:
                 text = original
                 for pattern, replacement in _COMPRESSION_PATTERNS:
                     text = pattern.sub(replacement, text)
-                # Also: strip trailing punctuation repetition
-                text = re.sub(r'[。]{2,}', '。', text)
-                text = re.sub(r'[，]{2,}', '，', text)
+                # Strip trailing punctuation repetition
+                text = re.sub(r'[.]{2,}', '.', text)
+                text = re.sub(r'[,]{2,}', ',', text)
                 if text != original:
                     run.text = text
                     changed = True
@@ -631,17 +583,17 @@ class AutoFixPipeline:
                 original = text
 
                 # If text has semicolons with 3+ clauses, trim to first 2
-                if '；' in text:
-                    parts = text.split('；')
+                if ';' in text:
+                    parts = text.split(';')
                     if len(parts) > 2:
-                        text = '；'.join(parts[:2])
+                        text = ';'.join(parts[:2])
                         changed = True
 
                 # If text has commas with many clauses (>3), trim
-                if text.count('，') > 3:
-                    parts = text.split('，')
+                if text.count(',') > 3:
+                    parts = text.split(',')
                     if len(parts) > 4:
-                        text = '，'.join(parts[:3]) + '。'
+                        text = ','.join(parts[:3]) + '.'
                         changed = True
 
                 if text != original:
