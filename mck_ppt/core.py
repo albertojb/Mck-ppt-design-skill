@@ -139,7 +139,7 @@ def add_oval(slide, x, y, letter, size=Inches(0.45), bg=NAVY, fg=WHITE):
         set_ea_font(run, 'Arial')
     bodyPr = tf._txBody.find(qn('a:bodyPr'))
     bodyPr.set('anchor', 'ctr')
-    # 圆形内文字边距全部设为0，确保文字居中紧贴
+    # zero internal padding so text centers flush inside the oval
     for attr in ['lIns', 'tIns', 'rIns', 'bIns']:
         bodyPr.set(attr, '0')
     _clean_shape(c)
