@@ -10,11 +10,7 @@ description: >-
   eng.grouped_bar(), eng.table_insight(), and eng.donut(), along with strict
   typography, anti-corruption XML cleanup, BLOCK_ARC native circular charts,
   spacing and overflow guard rails, and structured layout guidance for
-  consultant-style storytelling. This is a cleaned, maintainable skill spec that
-  preserves the important behaviors of the original while removing duplication,
-  translating non-English documentation to English, adding explicit
-  security/privacy controls for outbound integrations, and incorporating Pyramid
-  Principle communication rules for answer-first executive messaging.
+  consultant-style storytelling.
 ---
 
 # McKinsey PPT Design Framework
